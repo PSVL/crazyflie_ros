@@ -148,7 +148,7 @@ struct crtpParamValueResponse
   };
 } __attribute__((packed));
 
-// Port 3 (Commander)
+// Port 3 (Setpoint)
 
 struct crtpSetpointRequest
 {
@@ -361,6 +361,24 @@ struct crtpLogDataResponse
     uint8_t data[26];
 } __attribute__((packed));
 
+// Port 6 (Position)
+struct crtpPositionRequest
+{
+  crtpPositionRequest(
+    float x,
+    float y,
+    float z)
+    : header(0x06, 0)
+    , x(x)
+    , y(y)
+    , z(z)
+  {
+  }
+  const crtp header;
+  float x;
+  float y;
+  float z;
+}  __attribute__((packed));
 
 
 // Port 13 (Platform)
