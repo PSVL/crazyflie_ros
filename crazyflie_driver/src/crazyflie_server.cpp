@@ -60,6 +60,7 @@ public:
     , m_serviceEmergency()
     , m_serviceUpdateParams()
     , m_subscribeCmdVel()
+    , m_subscribePose()
     , m_pubImu()
     , m_pubTemp()
     , m_pubMag()
@@ -70,6 +71,8 @@ public:
   {
     ros::NodeHandle n;
     m_subscribeCmdVel = n.subscribe(tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
+    // TODO: Update the pose path below to be real
+    m_subscribePose = n.subscribe(tf_prefix + "/pose", 1, &CrazyflieROS::sendPosition, this);
     m_serviceEmergency = n.advertiseService(tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
     m_serviceUpdateParams = n.advertiseService(tf_prefix + "/update_params", &CrazyflieROS::updateParams, this);
 
@@ -193,6 +196,15 @@ private:
       m_cf.sendSetpoint(roll, pitch, yawrate, thrust);
       m_sentSetpoint = true;
     }
+  }
+
+  void sendPosition(
+    const geometry_msgs::PoseStamped::ConstPtr& msg)
+  {
+    // Add a condition here where we'd want to use the mocap position
+    m_cf.sendPosition((float)(msg->pose->position->x),
+                      (float)(msg->pose->position->y),
+                      (float)(msg->pose->position->z));
   }
 
   void run()
@@ -453,6 +465,7 @@ private:
   ros::ServiceServer m_serviceEmergency;
   ros::ServiceServer m_serviceUpdateParams;
   ros::Subscriber m_subscribeCmdVel;
+  ros::Subscriber m_subscribePose;
   ros::Publisher m_pubImu;
   ros::Publisher m_pubTemp;
   ros::Publisher m_pubMag;
