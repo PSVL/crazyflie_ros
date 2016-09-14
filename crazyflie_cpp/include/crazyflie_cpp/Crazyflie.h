@@ -75,6 +75,11 @@ public:
     float yawrate,
     uint16_t thrust);
 
+  void sendPosition(
+    float x,
+    float y,
+    float z);
+
   void sendPing();
 
   void reboot();
