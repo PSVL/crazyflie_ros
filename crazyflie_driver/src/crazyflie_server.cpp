@@ -5,6 +5,7 @@
 #include "crazyflie_driver/UpdateParams.h"
 #include "std_srvs/Empty.h"
 #include "geometry_msgs/Twist.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/Temperature.h"
 #include "sensor_msgs/MagneticField.h"
@@ -71,8 +72,7 @@ public:
   {
     ros::NodeHandle n;
     m_subscribeCmdVel = n.subscribe(tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
-    // TODO: Update the pose path below to be real
-    m_subscribePose = n.subscribe(tf_prefix + "/pose", 1, &CrazyflieROS::sendPosition, this);
+    m_subscribePose = n.subscribe("vrpn_client_node/Crazyflie1/pose", 1, &CrazyflieROS::sendPosition, this);
     m_serviceEmergency = n.advertiseService(tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
     m_serviceUpdateParams = n.advertiseService(tf_prefix + "/update_params", &CrazyflieROS::updateParams, this);
 
@@ -202,9 +202,9 @@ private:
     const geometry_msgs::PoseStamped::ConstPtr& msg)
   {
     // Add a condition here where we'd want to use the mocap position
-    m_cf.sendPosition((float)(msg->pose->position->x),
-                      (float)(msg->pose->position->y),
-                      (float)(msg->pose->position->z));
+    m_cf.sendPosition((float)(msg->pose.position.x),
+                      (float)(msg->pose.position.y),
+                      (float)(msg->pose.position.z));
   }
 
   void run()
@@ -274,7 +274,7 @@ private:
             {"gyro", "y"},
             {"gyro", "z"},
           }, cb));
-        logBlockImu->start(1); // 10ms
+        logBlockImu->start(10); // 10ms
       }
 
       if (   m_enable_logging_temperature
