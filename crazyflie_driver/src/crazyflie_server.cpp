@@ -9,11 +9,13 @@
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/Temperature.h"
 #include "sensor_msgs/MagneticField.h"
+#include "sensor_msgs/Image.h"
 #include "std_msgs/Float32.h"
 
 //#include <regex>
 #include <thread>
 #include <mutex>
+#include <iostream>
 
 #include <crazyflie_cpp/Crazyflie.h>
 
@@ -43,7 +45,8 @@ public:
     bool enable_logging_temperature,
     bool enable_logging_magnetic_field,
     bool enable_logging_pressure,
-    bool enable_logging_battery)
+    bool enable_logging_battery,
+    bool enable_mocap_position)
     : m_cf(link_uri)
     , m_tf_prefix(tf_prefix)
     , m_isEmergency(false)
@@ -58,21 +61,23 @@ public:
     , m_enable_logging_magnetic_field(enable_logging_magnetic_field)
     , m_enable_logging_pressure(enable_logging_pressure)
     , m_enable_logging_battery(enable_logging_battery)
+    , m_enable_mocap_position(enable_mocap_position)
     , m_serviceEmergency()
     , m_serviceUpdateParams()
     , m_subscribeCmdVel()
-    , m_subscribePose()
+    , m_subscribeMocapPose()
+    , m_subscribeCFPose()
     , m_pubImu()
     , m_pubTemp()
     , m_pubMag()
     , m_pubPressure()
     , m_pubBattery()
     , m_pubRssi()
+    , m_cfPose()
     , m_sentSetpoint(false)
   {
     ros::NodeHandle n;
     m_subscribeCmdVel = n.subscribe(tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
-    m_subscribePose = n.subscribe("vrpn_client_node/Crazyflie1/pose", 1, &CrazyflieROS::sendPosition, this);
     m_serviceEmergency = n.advertiseService(tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
     m_serviceUpdateParams = n.advertiseService(tf_prefix + "/update_params", &CrazyflieROS::updateParams, this);
 
@@ -91,7 +96,13 @@ public:
     if (m_enable_logging_battery) {
       m_pubBattery = n.advertise<std_msgs::Float32>(tf_prefix + "/battery", 10);
     }
+    if (m_enable_mocap_position) {
+      std::cout << "Mocap enabled" << std::endl;
+      m_subscribeMocapPose = n.subscribe("vrpn_client_node/"+tf_prefix+"/pose", 1, &CrazyflieROS::sendPosition, this);
+      m_subscribeCFPose    = n.subscribe(tf_prefix+"/pose", 1, &CrazyflieROS::onCFPose, this);
+    }
     m_pubRssi = n.advertise<std_msgs::Float32>(tf_prefix + "/rssi", 10);
+    m_pubImg  = n.advertise<sensor_msgs::Image>(tf_prefix + "/img", 10);
 
     for (auto& logBlock : m_logBlocks)
     {
@@ -146,6 +157,7 @@ private:
     ROS_INFO("Update parameters");
     for (auto&& p : req.params) {
       std::string ros_param = "/" + m_tf_prefix + "/" + p;
+      std::cout << "Param " << ros_param << std::endl;
       size_t pos = p.find("/");
       std::string group(p.begin(), p.begin() + pos);
       std::string name(p.begin() + pos + 1, p.end());
@@ -198,13 +210,41 @@ private:
     }
   }
 
+  void onCFPose(const geometry_msgs::PoseStamped::ConstPtr& msg)
+  {
+    m_cfPose = *msg;
+  }
+
   void sendPosition(
     const geometry_msgs::PoseStamped::ConstPtr& msg)
   {
-    // Add a condition here where we'd want to use the mocap position
-    m_cf.sendPosition((float)(msg->pose.position.x),
-                      (float)(msg->pose.position.y),
-                      (float)(msg->pose.position.z));
+    if (m_enable_mocap_position) {
+      float posErr2 = pow(m_cfPose.pose.position.x - msg->pose.position.x, 2) +
+                      pow(m_cfPose.pose.position.y - msg->pose.position.y, 2) +
+                      pow(m_cfPose.pose.position.z - msg->pose.position.z, 2);
+      static float errThresh = 0.5f;
+      static bool  increaseThreshCount = false;
+      static uint16_t threshCountMax = 2;
+      static uint16_t threshCount = 0;
+      // Send position if the position error is greater than a threshold
+      if (posErr2 > powf(errThresh, 2)) {
+        // Increase the threshold to trigger
+        if (increaseThreshCount == true) {
+          increaseThreshCount = false;
+          if (++threshCount >= threshCountMax) {
+            threshCount = 0;
+            errThresh -= 0.05f;
+            threshCountMax *= 1.5;
+            std::cout << "Error thresh now: " << errThresh << std::endl;
+          }
+        }
+        m_cf.sendPosition((float)(msg->pose.position.x),
+                          (float)(msg->pose.position.y),
+                          (float)(msg->pose.position.z));
+      } else {
+        increaseThreshCount = true;
+      }
+    }
   }
 
   void run()
@@ -335,6 +375,21 @@ private:
       if (m_enableLogging && !m_sentSetpoint) {
         m_cf.sendPing();
       }
+      if (m_cf.new_image) {
+        m_cf.new_image = false;
+        sensor_msgs::Image msg;
+        msg.header.stamp = ros::Time::now();
+        msg.header.frame_id = m_tf_prefix + "/base_link";
+        msg.height = 8;
+        msg.width = 8;
+        msg.encoding = "mono8";
+        msg.step = msg.width;
+        msg.data.resize(msg.height*msg.step);
+        for (uint8_t i = 0; i < 8*8; i++) {
+          msg.data[i] = m_cf.pixels[i];
+        }
+        m_pubImg.publish(msg);
+      }
       m_sentSetpoint = false;
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
@@ -461,18 +516,23 @@ private:
   bool m_enable_logging_magnetic_field;
   bool m_enable_logging_pressure;
   bool m_enable_logging_battery;
+  bool m_enable_mocap_position;
 
   ros::ServiceServer m_serviceEmergency;
   ros::ServiceServer m_serviceUpdateParams;
   ros::Subscriber m_subscribeCmdVel;
-  ros::Subscriber m_subscribePose;
+  ros::Subscriber m_subscribeMocapPose;
+  ros::Subscriber m_subscribeCFPose;
   ros::Publisher m_pubImu;
   ros::Publisher m_pubTemp;
   ros::Publisher m_pubMag;
   ros::Publisher m_pubPressure;
   ros::Publisher m_pubBattery;
   ros::Publisher m_pubRssi;
+  ros::Publisher m_pubImg;
   std::vector<ros::Publisher> m_pubLogDataGeneric;
+
+  geometry_msgs::PoseStamped m_cfPose;
 
   bool m_sentSetpoint;
 };
@@ -504,7 +564,8 @@ bool add_crazyflie(
     req.enable_logging_temperature,
     req.enable_logging_magnetic_field,
     req.enable_logging_pressure,
-    req.enable_logging_battery);
+    req.enable_logging_battery,
+    req.enable_mocap_position);
 
   return true;
 }

@@ -20,6 +20,7 @@ int main(int argc, char **argv)
   bool enable_logging_magnetic_field;
   bool enable_logging_pressure;
   bool enable_logging_battery;
+  bool enable_mocap_position;
 
   n.getParam("uri", uri);
   n.getParam("tf_prefix", tf_prefix);
@@ -29,10 +30,11 @@ int main(int argc, char **argv)
   n.param("enable_parameters", enable_parameters, true);
   n.param("use_ros_time", use_ros_time, true);
   n.param("enable_logging_imu", enable_logging_imu, true);
-  n.param("enable_logging_temperature", enable_logging_temperature, true);
-  n.param("enable_logging_magnetic_field", enable_logging_magnetic_field, true);
-  n.param("enable_logging_pressure", enable_logging_pressure, true);
+  n.param("enable_logging_temperature", enable_logging_temperature, false);
+  n.param("enable_logging_magnetic_field", enable_logging_magnetic_field, false);
+  n.param("enable_logging_pressure", enable_logging_pressure, false);
   n.param("enable_logging_battery", enable_logging_battery, true);
+  n.param("enable_mocap_position", enable_mocap_position, true);
 
   ROS_INFO("wait_for_service /add_crazyflie");
   ros::ServiceClient addCrazyflieService = n.serviceClient<crazyflie_driver::AddCrazyflie>("/add_crazyflie");
@@ -51,6 +53,7 @@ int main(int argc, char **argv)
   addCrazyflie.request.enable_logging_magnetic_field = enable_logging_magnetic_field;
   addCrazyflie.request.enable_logging_pressure = enable_logging_pressure;
   addCrazyflie.request.enable_logging_battery = enable_logging_battery;
+  addCrazyflie.request.enable_mocap_position = enable_mocap_position;
 
   std::vector<std::string> genericLogTopics;
   n.param("genericLogTopics", genericLogTopics, std::vector<std::string>());
