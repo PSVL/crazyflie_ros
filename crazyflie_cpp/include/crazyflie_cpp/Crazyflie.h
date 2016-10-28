@@ -103,6 +103,10 @@ public:
     return m_logTocEntries.end();
   }
 
+  //sensor_msgs::Image image;
+  bool new_image;
+  uint8_t pixels[8*8];
+
   template<class T>
   void setParam(uint8_t id, const T& value) {
     ParamValue v;

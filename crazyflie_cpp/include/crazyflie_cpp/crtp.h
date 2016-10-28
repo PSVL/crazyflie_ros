@@ -380,6 +380,16 @@ struct crtpPositionRequest
   float z;
 }  __attribute__((packed));
 
+struct crtpImageData
+{
+  static bool match(const Crazyradio::Ack& response) {
+    return crtp(response.data[0]) == crtp(7, 0);
+  }
+
+  crtp header;
+  uint8_t row;
+  uint16_t data[8];
+} __attribute__((packed));
 
 // Port 13 (Platform)
 
