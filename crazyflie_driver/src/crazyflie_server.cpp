@@ -243,6 +243,7 @@ private:
                           (float)(msg->pose.position.z));
       } else {
         increaseThreshCount = true;
+        m_cf.sendPosition(NAN, NAN, (float)(msg->pose.position.z));
       }
     }
   }
