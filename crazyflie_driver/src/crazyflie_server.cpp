@@ -227,7 +227,7 @@ private:
       static uint16_t threshCountMax = 2;
       static uint16_t threshCount = 0;
       // Send position if the position error is greater than a threshold
-      if (posErr2 > powf(errThresh, 2)) {
+      if (posErr2 < powf(1.5f, 2) && posErr2 > powf(errThresh, 2)) {
         // Increase the threshold to trigger
         if (increaseThreshCount == true) {
           increaseThreshCount = false;
