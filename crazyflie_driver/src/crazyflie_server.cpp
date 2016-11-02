@@ -96,7 +96,7 @@ public:
       m_pubBattery = n.advertise<std_msgs::Float32>(tf_prefix + "/battery", 10);
     }
     if (m_enable_mocap_position) {
-      std::cout << "Mocap enabled" << std::endl;
+      std::cout << m_tf_prefix << "Mocap enabled" << std::endl;
       m_subscribeMocapPose = n.subscribe("vrpn_client_node/"+tf_prefix+"/pose", 1, &CrazyflieROS::sendPosition, this);
       m_subscribeCFPose    = n.subscribe(tf_prefix+"/pose", 1, &CrazyflieROS::onCFPose, this);
     }
@@ -156,7 +156,7 @@ private:
     ROS_INFO("Update parameters");
     for (auto&& p : req.params) {
       std::string ros_param = "/" + m_tf_prefix + "/" + p;
-      std::cout << "Param " << ros_param << std::endl;
+      std::cout << m_tf_prefix << "Param " << ros_param << std::endl;
       size_t pos = p.find("/");
       std::string group(p.begin(), p.begin() + pos);
       std::string name(p.begin() + pos + 1, p.end());
@@ -234,7 +234,7 @@ private:
             threshCount = 0;
             errThresh -= 0.05f;
             threshCountMax *= 1.5;
-            std::cout << "Error thresh now: " << errThresh << std::endl;
+            std::cout << m_tf_prefix << ": Error thresh now: " << errThresh << std::endl;
           }
         }
         m_cf.sendPosition((float)(msg->pose.position.x),
