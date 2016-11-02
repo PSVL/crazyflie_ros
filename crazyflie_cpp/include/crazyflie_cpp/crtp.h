@@ -388,7 +388,7 @@ struct crtpImageData
 
   crtp header;
   uint8_t row;
-  uint16_t data[8];
+  uint8_t data[16];
 } __attribute__((packed));
 
 // Port 13 (Platform)
