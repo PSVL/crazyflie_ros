@@ -421,13 +421,8 @@ void Crazyflie::handleAck(
   else if (crtpImageData::match(result)) {
     crtpImageData* r = (crtpImageData*)result.data;
     static uint8_t rows = 0;
-    float temp[8] = {};
-    for (uint8_t i = 0; i < 8; i++) {
-      uint16_t masked = r->data[i] & ((1 << 11)-1);
-      temp[i] = masked * 0.25f;
-      pixels[r->row*8 + i] = (uint8_t)(masked * 0.25f);
-      rows |= (1 << r->row);
-    }
+    memcpy(pixels+r->row*16, r->data, 16);
+    rows |= (3 << r->row);
     if (rows == 0xFF) {
       rows = 0;
       new_image = true;
