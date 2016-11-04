@@ -419,9 +419,9 @@ void Crazyflie::handleAck(
     }
   }
   else if (crtpImageData::match(result)) {
-    crtpImageData* r = (crtpImageData*)result.data;
     static uint8_t rows = 0;
-    memcpy(pixels+r->row*16, r->data, 16);
+    crtpImageData* r = (crtpImageData*)result.data;
+    memcpy(pixels+r->row*8, r->data, 16);
     rows |= (3 << r->row);
     if (rows == 0xFF) {
       rows = 0;
