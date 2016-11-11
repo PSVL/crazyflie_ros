@@ -1,5 +1,6 @@
 #include "ros/ros.h"
 #include "crazyflie_driver/AddCrazyflie.h"
+#include "crazyflie_driver/RemoveCrazyflie.h"
 #include "crazyflie_driver/LogBlock.h"
 #include "crazyflie_driver/GenericLogData.h"
 #include "crazyflie_driver/UpdateParams.h"
@@ -11,15 +12,19 @@
 #include "sensor_msgs/MagneticField.h"
 #include "sensor_msgs/Image.h"
 #include "std_msgs/Float32.h"
+#include "std_msgs/Float32MultiArray.h"
 
 //#include <regex>
 #include <thread>
 #include <mutex>
 #include <iostream>
 
+#include <string>
+#include <map>
+
 #include <crazyflie_cpp/Crazyflie.h>
 
-constexpr double pi() { return std::atan(1)*4; }
+constexpr double pi() { return 3.141592653589793238462643383279502884; }
 
 double degToRad(double deg) {
     return deg / 180.0 * pi();
@@ -75,9 +80,11 @@ public:
     , m_pubRssi()
     , m_cfPose()
     , m_sentSetpoint(false)
+    , m_sentExternalPosition(false)
   {
     ros::NodeHandle n;
     m_subscribeCmdVel = n.subscribe(tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
+    m_subscribeExternalPosition = n.subscribe(tf_prefix + "/external_position", 1, &CrazyflieROS::positionMeasurementChanged, this);
     m_serviceEmergency = n.advertiseService(tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
 
     if (m_enable_logging_imu) {
@@ -105,11 +112,17 @@ public:
 
     for (auto& logBlock : m_logBlocks)
     {
-      m_pubLogDataGeneric.push_back(n.advertise<crazyflie_driver::GenericLogData>(tf_prefix + "/" + logBlock.topic_name, 10));
+      m_pubLogDataGeneric.push_back(n.advertise<std_msgs::Float32MultiArray>(tf_prefix + "/" + logBlock.topic_name, 10));
     }
 
-    std::thread t(&CrazyflieROS::run, this);
-    t.detach();
+    m_thread = std::thread(&CrazyflieROS::run, this);
+  }
+
+  void stop()
+  {
+    ROS_INFO("Disconnecting ...");
+    m_isEmergency = true;
+    m_thread.join();
   }
 
 private:
@@ -199,10 +212,10 @@ private:
     const geometry_msgs::Twist::ConstPtr& msg)
   {
     if (!m_isEmergency) {
-      float roll = msg->linear.y + m_roll_trim;
-      float pitch = - (msg->linear.x + m_pitch_trim);
+      float roll    = msg->linear.y + m_roll_trim;
+      float pitch   = - (msg->linear.x + m_pitch_trim);
       float yawrate = msg->angular.z;
-      uint16_t thrust = std::min<uint16_t>(std::max<float>(msg->linear.z, 0.0), 60000);
+      float thrust  = msg->linear.z;
 
       m_cf.sendSetpoint(roll, pitch, yawrate, thrust);
       m_sentSetpoint = true;
@@ -374,7 +387,7 @@ private:
 
     while(!m_isEmergency) {
       // make sure we ping often enough to stream data out
-      if (m_enableLogging && !m_sentSetpoint) {
+      if (m_enableLogging && !m_sentSetpoint && !m_sentExternalPosition) {
         m_cf.sendPing();
       }
       if (m_cf.new_image) {
@@ -393,6 +406,7 @@ private:
         m_pubImg.publish(msg);
       }
       m_sentSetpoint = false;
+      m_sentExternalPosition = false;
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
@@ -478,14 +492,15 @@ private:
 
     ros::Publisher* pub = reinterpret_cast<ros::Publisher*>(userData);
 
-    crazyflie_driver::GenericLogData msg;
-    if (m_use_ros_time) {
-      msg.header.stamp = ros::Time::now();
-    } else {
-      msg.header.stamp = ros::Time(time_in_ms / 1000.0);
+    std_msgs::Float32MultiArray msg;
+    msg.layout.dim.resize(1);
+    msg.layout.dim[0].label  = "float";
+    msg.layout.dim[0].size   = values->size();
+    msg.layout.dim[0].stride = msg.layout.dim[0].size*sizeof(float);
+    msg.data.resize(values->size());
+    for (unsigned i = 0; i < values->size(); i++) {
+      msg.data[i] = (*values)[i];
     }
-    msg.header.frame_id = m_tf_prefix + "/base_link";
-    msg.values = *values;
 
     pub->publish(msg);
   }
@@ -537,7 +552,11 @@ private:
   geometry_msgs::PoseStamped m_cfPose;
 
   bool m_sentSetpoint;
+
+  std::thread m_thread;
 };
+
+static std::map<std::string, CrazyflieROS*> crazyflies;
 
 bool add_crazyflie(
   crazyflie_driver::AddCrazyflie::Request  &req,
@@ -552,7 +571,12 @@ bool add_crazyflie(
     req.enable_logging,
     req.use_ros_time);
 
-  // Leak intentionally
+  // Ignore if the uri is already in use
+  if (crazyflies.find(req.uri) != crazyflies.end()) {
+    ROS_ERROR("Cannot add %s, already added.", req.uri.c_str());
+    return false;
+  }
+
   CrazyflieROS* cf = new CrazyflieROS(
     req.uri,
     req.tf_prefix,
@@ -569,6 +593,29 @@ bool add_crazyflie(
     req.enable_logging_battery,
     req.enable_mocap_position);
 
+  crazyflies[req.uri] = cf;
+
+  return true;
+}
+
+bool remove_crazyflie(
+  crazyflie_driver::RemoveCrazyflie::Request  &req,
+  crazyflie_driver::RemoveCrazyflie::Response &res)
+{
+
+  if (crazyflies.find(req.uri) == crazyflies.end()) {
+    ROS_ERROR("Cannot remove %s, not connected.", req.uri.c_str());
+    return false;
+  }
+
+  ROS_INFO("Removing crazyflie at uri %s.", req.uri.c_str());
+
+  crazyflies[req.uri]->stop();
+  delete crazyflies[req.uri];
+  crazyflies.erase(req.uri);
+
+  ROS_INFO("Crazyflie %s removed.", req.uri.c_str());
+
   return true;
 }
 
@@ -577,7 +624,8 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "crazyflie_server");
   ros::NodeHandle n;
 
-  ros::ServiceServer service = n.advertiseService("add_crazyflie", add_crazyflie);
+  ros::ServiceServer serviceAdd = n.advertiseService("add_crazyflie", add_crazyflie);
+  ros::ServiceServer serviceRemove = n.advertiseService("remove_crazyflie", remove_crazyflie);
   ros::spin();
 
   return 0;

@@ -73,7 +73,7 @@ public:
     float roll,
     float pitch,
     float yawrate,
-    uint16_t thrust);
+    float thrust);
 
   void sendPosition(
     float x,
@@ -300,9 +300,13 @@ public:
 
   void stop()
   {
+    int timeout = 50;
     crtpLogStopRequest request(m_id);
     while (m_cf->m_blockStopped.find(m_id) == m_cf->m_blockStopped.end()) {
       m_cf->sendPacket((const uint8_t*)&request, sizeof(request));
+      if (!timeout--) {
+        break;
+      }
     }
     m_cf->m_blockStarted.erase(m_id);
   }
@@ -391,9 +395,13 @@ public:
 
   void stop()
   {
+    int timeout = 50;
     crtpLogStopRequest request(m_id);
     while (m_cf->m_blockStopped.find(m_id) == m_cf->m_blockStopped.end()) {
       m_cf->sendPacket((const uint8_t*)&request, sizeof(request));
+      if (!timeout--) {
+        break;
+      }
     }
     m_cf->m_blockStarted.erase(m_id);
   }
