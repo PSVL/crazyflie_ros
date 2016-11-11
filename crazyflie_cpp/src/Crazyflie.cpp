@@ -427,19 +427,6 @@ void Crazyflie::handleAck(
       rows = 0;
       new_image = true;
     }
-
-    //if (r->row == 0) {
-    //  printf("\n");
-    //}
-    //printf("Row: %d: %d %d %d %d %d %d %d %d\n",
-    //    r->row, pixels[r->row*8+0], pixels[r->row*8+1], pixels[r->row*8+2], pixels[r->row*8+3],
-    //    pixels[r->row*8+4], pixels[r->row*8+5], pixels[r->row*8+6], pixels[r->row*8+7]);
-    //printf("Row: %d: %2.2f %2.2f %2.2f %2.2f %2.2f %2.2f %2.2f %2.2f \n",
-    //    r->row, temp[0], temp[1], temp[2], temp[3],
-    //    temp[4], temp[5], temp[6], temp[7]);
-    //printf("Row %d: %04x %04x %04x %04x %04x %04x %04x %04x\n",
-    //    r->row, r->data[0], r->data[1], r->data[2], r->data[3],
-    //    r->data[4], r->data[5], r->data[6], r->data[7]);
   }
   else {
     crtp* header = (crtp*)result.data;

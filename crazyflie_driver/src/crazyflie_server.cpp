@@ -61,10 +61,10 @@ public:
     , m_enableParameters(enable_parameters)
     , m_logBlocks(log_blocks)
     , m_use_ros_time(use_ros_time)
-    , m_enable_logging_imu(enable_logging_imu)
-    , m_enable_logging_temperature(enable_logging_temperature)
-    , m_enable_logging_magnetic_field(enable_logging_magnetic_field)
-    , m_enable_logging_pressure(enable_logging_pressure)
+    , m_enable_logging_imu(false)
+    , m_enable_logging_temperature(false)
+    , m_enable_logging_magnetic_field(false)
+    , m_enable_logging_pressure(false)
     , m_enable_logging_battery(enable_logging_battery)
     , m_enable_mocap_position(enable_mocap_position)
     , m_serviceEmergency()
@@ -101,7 +101,7 @@ public:
       m_pubBattery = n.advertise<std_msgs::Float32>(tf_prefix + "/battery", 10);
     }
     if (m_enable_mocap_position) {
-      std::cout << m_tf_prefix << "Mocap enabled" << std::endl;
+      std::cout << m_tf_prefix << ": Mocap enabled" << std::endl;
       m_subscribeMocapPose = n.subscribe("vrpn_client_node/"+tf_prefix+"/pose", 1, &CrazyflieROS::sendPosition, this);
       m_subscribeCFPose    = n.subscribe(tf_prefix+"/pose", 1, &CrazyflieROS::onCFPose, this);
     }
@@ -167,7 +167,7 @@ private:
     ROS_INFO("Update parameters");
     for (auto&& p : req.params) {
       std::string ros_param = "/" + m_tf_prefix + "/" + p;
-      std::cout << m_tf_prefix << "Param " << ros_param << std::endl;
+      std::cout << m_tf_prefix << ": Param " << ros_param << std::endl;
       size_t pos = p.find("/");
       std::string group(p.begin(), p.begin() + pos);
       std::string name(p.begin() + pos + 1, p.end());
