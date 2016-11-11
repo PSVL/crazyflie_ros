@@ -80,11 +80,9 @@ public:
     , m_pubRssi()
     , m_cfPose()
     , m_sentSetpoint(false)
-    , m_sentExternalPosition(false)
   {
     ros::NodeHandle n;
     m_subscribeCmdVel = n.subscribe(tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
-    m_subscribeExternalPosition = n.subscribe(tf_prefix + "/external_position", 1, &CrazyflieROS::positionMeasurementChanged, this);
     m_serviceEmergency = n.advertiseService(tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
 
     if (m_enable_logging_imu) {
@@ -387,7 +385,7 @@ private:
 
     while(!m_isEmergency) {
       // make sure we ping often enough to stream data out
-      if (m_enableLogging && !m_sentSetpoint && !m_sentExternalPosition) {
+      if (m_enableLogging && !m_sentSetpoint) {
         m_cf.sendPing();
       }
       if (m_cf.new_image) {
@@ -406,7 +404,6 @@ private:
         m_pubImg.publish(msg);
       }
       m_sentSetpoint = false;
-      m_sentExternalPosition = false;
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
