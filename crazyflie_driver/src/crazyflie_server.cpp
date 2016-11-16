@@ -68,6 +68,7 @@ public:
     , m_enable_logging_battery(enable_logging_battery)
     , m_enable_mocap_position(enable_mocap_position)
     , m_serviceEmergency()
+    , m_serviceRestore()
     , m_serviceUpdateParams()
     , m_subscribeCmdVel()
     , m_subscribeMocapPose()
@@ -84,6 +85,7 @@ public:
     ros::NodeHandle n;
     m_subscribeCmdVel = n.subscribe(tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
     m_serviceEmergency = n.advertiseService(tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
+    m_serviceRestore = n.advertiseService(tf_prefix + "/restore", &CrazyflieROS::restore, this);
 
     if (m_enable_logging_imu) {
       m_pubImu = n.advertise<sensor_msgs::Imu>(tf_prefix + "/imu", 10);
@@ -106,7 +108,7 @@ public:
       m_subscribeCFPose    = n.subscribe(tf_prefix+"/pose", 1, &CrazyflieROS::onCFPose, this);
     }
     m_pubRssi = n.advertise<std_msgs::Float32>(tf_prefix + "/rssi", 10);
-    m_pubImg  = n.advertise<sensor_msgs::Image>(tf_prefix + "/img", 10);
+    m_pubImg  = n.advertise<sensor_msgs::Image>(tf_prefix + "/grideye/image", 10);
 
     for (auto& logBlock : m_logBlocks)
     {
@@ -149,6 +151,16 @@ private:
   {
     ROS_FATAL("Emergency requested!");
     m_isEmergency = true;
+
+    return true;
+  }
+
+  bool restore(
+    std_srvs::Empty::Request& req,
+    std_srvs::Empty::Response& res)
+  {
+    ROS_FATAL("Emergency clear!");
+    m_isEmergency = false;
 
     return true;
   }
@@ -228,7 +240,10 @@ private:
   void sendPosition(
     const geometry_msgs::PoseStamped::ConstPtr& msg)
   {
-    if (m_enable_mocap_position) {
+    //m_cf.sendPosition((float)(msg->pose.position.x),
+    //                  (float)(msg->pose.position.y),
+    //                  (float)(msg->pose.position.z));
+    if (false && m_enable_mocap_position) {
       float posErr2 = pow(m_cfPose.pose.position.x - msg->pose.position.x, 2) +
                       pow(m_cfPose.pose.position.y - msg->pose.position.y, 2) +
                       pow(m_cfPose.pose.position.z - msg->pose.position.z, 2);
@@ -383,16 +398,41 @@ private:
        m_cf.sendSetpoint(0, 0, 0, 0);
     }
 
-    while(!m_isEmergency) {
+    while(true) {
+      if (m_isEmergency) {
+        int althold, posset;
+        ros::param::get(m_tf_prefix + "/flightmode/althold", althold);
+        ros::param::get(m_tf_prefix + "/flightmode/posSet", posset);
+        if (althold != 0 || posset != 0) {
+          ros::param::set(m_tf_prefix + "/flightmode/althold", 0);
+          ros::param::set(m_tf_prefix + "/flightmode/posSet", 0);
+          crazyflie_driver::UpdateParams::Request req;
+          crazyflie_driver::UpdateParams::Response res;
+          std::string althold = "flightmode/althold";
+          std::string posset  = "flightmode/posSet";
+          req.params.resize(2);
+          req.params[0] = "flightmode/althold";
+          req.params[1] = "flightmode/posSet";
+          updateParams(req, res);
+        }
+
+        m_cf.sendSetpoint(0, 0, 0, 0);
+      }
       // make sure we ping often enough to stream data out
       if (m_enableLogging && !m_sentSetpoint) {
         m_cf.sendPing();
+      }
+      m_sentSetpoint = false;
+      int val = 0;
+      ros::param::get(m_tf_prefix + "/grideye/getNewFrame", val);
+      if (val == 0) {
+        m_cf.rows = 0;
       }
       if (m_cf.new_image) {
         m_cf.new_image = false;
         sensor_msgs::Image msg;
         msg.header.stamp = ros::Time::now();
-        msg.header.frame_id = m_tf_prefix + "/base_link";
+        msg.header.frame_id = m_tf_prefix + "/grideye_optical_frame";
         msg.height = 8;
         msg.width = 8;
         msg.encoding = "mono8";
@@ -402,8 +442,9 @@ private:
           msg.data[i] = m_cf.pixels[i];
         }
         m_pubImg.publish(msg);
+        ros::param::set(m_tf_prefix + "/grideye/getNewFrame", 0);
+        std::cout << m_tf_prefix << ": Got grideye frame" << std::endl;
       }
-      m_sentSetpoint = false;
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
@@ -533,6 +574,7 @@ private:
   bool m_enable_mocap_position;
 
   ros::ServiceServer m_serviceEmergency;
+  ros::ServiceServer m_serviceRestore;
   ros::ServiceServer m_serviceUpdateParams;
   ros::Subscriber m_subscribeCmdVel;
   ros::Subscriber m_subscribeMocapPose;
