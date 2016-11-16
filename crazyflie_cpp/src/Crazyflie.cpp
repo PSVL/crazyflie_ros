@@ -20,6 +20,7 @@ std::mutex g_mutex[MAX_RADIOS];
 Crazyflie::Crazyflie(
   const std::string& link_uri)
   : new_image(false)
+  , rows(0)
   , pixels{}
   , m_radio(NULL)
   , m_devId(0)
@@ -419,10 +420,10 @@ void Crazyflie::handleAck(
     }
   }
   else if (crtpImageData::match(result)) {
-    static uint8_t rows = 0;
     crtpImageData* r = (crtpImageData*)result.data;
     memcpy(pixels+r->row*8, r->data, 16);
     rows |= (3 << r->row);
+    //printf("Got image data: %x\n", rows);
     if (rows == 0xFF) {
       rows = 0;
       new_image = true;

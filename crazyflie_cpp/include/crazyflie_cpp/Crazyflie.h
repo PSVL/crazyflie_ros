@@ -105,6 +105,7 @@ public:
 
   //sensor_msgs::Image image;
   bool new_image;
+  uint8_t rows;
   uint8_t pixels[8*8];
 
   template<class T>
