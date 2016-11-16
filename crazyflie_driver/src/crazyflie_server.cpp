@@ -159,6 +159,9 @@ private:
     std_srvs::Empty::Request& req,
     std_srvs::Empty::Response& res)
   {
+    if (m_isEmergency == false) {
+      return true;
+    }
     ROS_FATAL("Emergency clear!");
     m_isEmergency = false;
 
